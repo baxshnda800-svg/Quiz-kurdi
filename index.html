@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="ckb" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>دروستکەری پەڕەی تاقیکردنەوە</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Arabic:wght@400;600;700;800&display=swap" rel="stylesheet">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+/* ============ UI ی بەرنامەکە ============ */
+:root{
+  --ink:#16223b; --ink2:#5a6883; --line:#d9e1ee; --panel:#fff; --canvas:#e8edf5;
+  --brand:#1f3050; --brand-hi:#2c447a; --focus:#2f6bff;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  font-family:'Noto Sans Arabic','Segoe UI',Tahoma,Arial,sans-serif;
+  background:var(--canvas); color:var(--ink); line-height:1.6;
+}
+.top{padding:1.6rem 1.2rem .4rem; max-width:1500px; margin:0 auto}
+.top h1{margin:0; font-size:1.7rem; font-weight:800; color:var(--brand)}
+.top p{margin:.3rem 0 0; color:var(--ink2); font-size:.98rem}
+
+.app{
+  max-width:1500px; margin:0 auto; padding:1rem 1.2rem 3rem;
+  display:grid; grid-template-columns:minmax(320px,410px) minmax(0,1fr); gap:1.2rem; align-items:start;
+}
+.panel{
+  background:var(--panel); border-radius:1rem; border:1px solid var(--line);
+  padding:1rem 1.1rem 1.2rem;
+  position:sticky; top:1rem; max-height:calc(100vh - 2rem); overflow:auto;
+}
+.panel h2{font-size:1rem; margin:1.1rem 0 .55rem; padding-bottom:.35rem; border-bottom:2px solid var(--brand); color:var(--brand); font-weight:800}
+.panel h2:first-child{margin-top:.2rem}
+label{display:block; font-size:.86rem; font-weight:600; color:var(--ink2); margin:.7rem 0 .25rem}
+input[type=text],input[type=number],select,textarea{
+  width:100%; font:inherit; font-size:.95rem; color:var(--ink);
+  border:1px solid var(--line); border-radius:.6rem; padding:.5rem .65rem; background:#fbfcfe;
+}
+textarea{min-height:230px; resize:vertical; line-height:1.7}
+input:focus-visible,select:focus-visible,textarea:focus-visible,button:focus-visible,summary:focus-visible{outline:3px solid var(--focus); outline-offset:1px}
+.row{display:flex; gap:.6rem}
+.row>*{flex:1; min-width:0}
+.check{display:flex; align-items:center; gap:.5rem; font-weight:600; font-size:.9rem; color:var(--ink); margin:.55rem 0 0}
+.check input{width:1.1rem; height:1.1rem; accent-color:var(--brand)}
+.btn{
+  font:inherit; font-weight:700; font-size:.92rem; cursor:pointer;
+  border:1px solid var(--brand); background:var(--brand); color:#fff;
+  border-radius:.65rem; padding:.5rem .95rem;
+}
+.btn:hover{background:var(--brand-hi)}
+.btn.ghost{background:#fff; color:var(--brand)}
+.btn.ghost:hover{background:#eef2fa}
+.btn:disabled{opacity:.5; cursor:not-allowed}
+.btns{display:flex; flex-wrap:wrap; gap:.5rem; margin-top:.6rem}
+details{margin-top:.7rem; font-size:.86rem; color:var(--ink2)}
+summary{cursor:pointer; font-weight:700; color:var(--brand)}
+details ul{margin:.4rem 0 0; padding-inline-start:1.2rem}
+details li{margin:.25rem 0}
+details code{background:#eef2fa; padding:0 .3rem; border-radius:.3rem; direction:ltr; unicode-bidi:isolate}
+#customRatio{display:none; margin-top:.4rem; align-items:center}
+#customRatio span{align-self:center; font-weight:800}
+#customRatio input{text-align:center; direction:ltr}
+
+.stage{min-width:0}
+.toolbar{
+  display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; justify-content:space-between;
+  background:var(--panel); border:1px solid var(--line); border-radius:1rem; padding:.7rem 1rem; margin-bottom:1rem;
+}
+#count{font-weight:700; color:var(--brand)}
+.status{min-height:1.4em; font-size:.88rem; color:var(--ink2); margin:-.4rem .3rem .8rem}
+.status.err{color:#b42318; font-weight:700}
+#pages{width:100%}
+.pfig{margin:0 0 1.6rem}
+.pagewrap{
+  position:relative; margin:0 auto; overflow:hidden; direction:ltr;
+  border-radius:.4rem; box-shadow:0 .6rem 2rem rgba(22,34,59,.2);
+}
+.cap{display:flex; justify-content:space-between; align-items:center; margin:.6rem auto 0; font-size:.88rem; font-weight:600; color:var(--ink2)}
+.empty{background:var(--panel); border:2px dashed var(--line); border-radius:1rem; padding:2.4rem 1.4rem; text-align:center; color:var(--ink2)}
+
+@media (max-width:940px){
+  .app{grid-template-columns:1fr}
+  .panel{position:static; max-height:none}
+}
+
+/* ============ لاپەڕەی دروستکراو (ئەمە دەچێتە ناو وێنە/PDF) ============ */
+.page{
+  position:absolute; left:0; top:0; transform-origin:0 0;
+  display:flex; flex-direction:column; overflow:hidden;
+  padding:.9em; direction:rtl; text-align:right; line-height:1.5;
+  font-family:'Noto Sans Arabic','Segoe UI',Tahoma,Arial,sans-serif;
+  background:var(--bg); color:var(--text);
+}
+/* ڕەنگەکان */
+.t-blue  {--bg:#f1f5fb; --hbg:#1f3050; --htx:#fff; --card:#fff; --text:#1e293b; --num:#1d4ed8; --pill:#f4f7fb; --pline:#e2e8f0; --shadow:rgba(30,48,80,.10); --cardline:#e8edf5; --ftx:#1f3050; --okbg:#e3f7ea; --okline:#16a34a}
+.t-green {--bg:#eff7f1; --hbg:#14532d; --htx:#fff; --card:#fff; --text:#1c2b22; --num:#15803d; --pill:#f3f8f4; --pline:#dcebdf; --shadow:rgba(20,83,45,.10); --cardline:#e2efe5; --ftx:#14532d; --okbg:#dcf5e3; --okline:#15803d}
+.t-purple{--bg:#f6f2fd; --hbg:#4c1d95; --htx:#fff; --card:#fff; --text:#241a3a; --num:#7c3aed; --pill:#f7f3fd; --pline:#e6dcf7; --shadow:rgba(76,29,149,.10); --cardline:#ece4f8; --ftx:#4c1d95; --okbg:#e3f7ea; --okline:#16a34a}
+.t-warm  {--bg:#fdf3ea; --hbg:#9a3412; --htx:#fff; --card:#fff; --text:#33221a; --num:#c2410c; --pill:#fdf6ef; --pline:#f1dfcf; --shadow:rgba(154,52,18,.10); --cardline:#f3e5d8; --ftx:#9a3412; --okbg:#e3f7ea; --okline:#16a34a}
+.t-dark  {--bg:#0b1220; --hbg:#1e293b; --htx:#f1f5f9; --card:#131d33; --text:#e6edf8; --num:#3b82f6; --pill:#1c2a47; --pline:#2b3c60; --shadow:rgba(0,0,0,.35); --cardline:#1f2c4a; --ftx:#cbd5e1; --okbg:#0f3a2a; --okline:#34d399}
+.t-paper {--bg:#fff; --hbg:transparent; --htx:#111; --card:transparent; --text:#111; --num:transparent; --pill:transparent; --pline:transparent; --shadow:transparent; --cardline:transparent; --ftx:#111; --okbg:#eaf7ee; --okline:#15803d; border:.12em solid #111}
+
+.hdr{
+  direction:ltr; flex:none; display:flex; align-items:center; justify-content:space-between;
+  background:var(--hbg); color:var(--htx); border-radius:1.1em; padding:.8em 1.1em; margin-bottom:.8em;
+}
+.hic{flex:none; width:1.7em; text-align:center; font-size:2.5em; line-height:1}
+.htx{flex:1; direction:rtl; text-align:center}
+.h1{font-size:2em; font-weight:800; line-height:1.3}
+.h2{font-size:1.05em; font-weight:600; margin-top:.1em}
+.h3{font-size:.92em; font-weight:400; margin-top:.25em; opacity:.9}
+
+.qs{
+  flex:1; min-height:0; overflow:hidden;
+  display:grid; grid-template-columns:repeat(var(--cols),minmax(0,1fr)); align-content:start;
+  gap:.7em; padding:.1em .1em .3em;
+}
+.q{background:var(--card); border:1px solid var(--cardline); border-radius:1em; padding:.75em .9em .8em; box-shadow:0 .1em .5em var(--shadow)}
+.qh{display:flex; align-items:center; gap:.7em}
+.side-ltr .qh,.side-ltr .opts{direction:ltr}
+.side-rtl .qh,.side-rtl .opts{direction:rtl}
+.qn{
+  flex:none; width:2em; height:2em; border-radius:50%; background:var(--num); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-weight:800; line-height:1;
+}
+.qt{flex:1; min-width:0; direction:rtl; unicode-bidi:plaintext; text-align:right; font-size:1.12em; font-weight:700; line-height:1.55}
+.opts{display:grid; grid-template-columns:repeat(var(--oc),minmax(0,1fr)); gap:.45em; margin-top:.6em}
+.opt{
+  display:flex; align-items:center; gap:.45em; min-width:0;
+  background:var(--pill); border:1px solid var(--pline); border-radius:999px; padding:.25em .45em;
+}
+.ob{
+  flex:none; width:1.7em; height:1.7em; border-radius:50%; background:var(--c); color:#fff;
+  display:flex; align-items:center; justify-content:center; font-size:.95em; font-weight:700; line-height:1;
+}
+.ot{flex:1; min-width:0; unicode-bidi:plaintext; overflow-wrap:anywhere; line-height:1.4; padding:0 .2em}
+.side-ltr .ot{text-align:left}
+.side-rtl .ot{text-align:right}
+.c0{--c:#3b82f6}.c1{--c:#22a06b}.c2{--c:#8b5cf6}.c3{--c:#f59e0b}.c4{--c:#ef4444}.c5{--c:#14b8a6}
+.opt.ok{background:var(--okbg); border-color:var(--okline)}
+.opt.ok .ot{font-weight:700}
+.opt.ok::after{content:"✓"; flex:none; padding:0 .35em; font-weight:800; color:var(--okline)}
+.blank{height:2.2em; margin-top:.4em; border-bottom:.06em dashed var(--pline)}
+
+.ftr{flex:none; display:flex; align-items:center; justify-content:center; gap:.8em; padding-top:.5em; font-size:1.1em; font-weight:700; color:var(--ftx)}
+.fl{display:inline-block; width:2.4em; height:.1em; background:var(--ftx); opacity:.45}
+.pn{position:absolute; bottom:.55em; left:1em; font-size:.75em; font-weight:600; color:var(--ftx); opacity:.6}
+
+/* ستایلی وەرەقەی تاقیکردنەوە (وەک وێنە یەکەم) */
+.t-paper .hdr{direction:rtl; display:block; border-radius:0; border-bottom:.08em solid #111; padding:.2em 0 .6em; text-align:center}
+.t-paper .info{display:grid; grid-template-columns:1fr 1fr; gap:.25em 1.2em; margin-top:.5em; text-align:right; font-size:.95em; font-weight:600}
+.t-paper .q{border-radius:0; padding:.45em 0 .55em; border:0; border-bottom:.05em dashed #bbb; box-shadow:none}
+.t-paper .qn{width:auto; height:auto; min-width:1.4em; border-radius:0; color:#111; font-weight:800}
+.t-paper .qn::after{content:"."}
+.t-paper .opt{border:0; border-radius:0; padding:0}
+.t-paper .ob{width:auto; height:auto; background:none; color:#111; border-radius:0; font-weight:800}
+.t-paper .ob::after{content:"."}
+.t-paper .ftr{font-weight:600}
+
+/* بینەری وێنە (بۆ پاشەکەوتکردن لە گەلەری) */
+#viewer{position:fixed; inset:0; z-index:50; background:rgba(11,18,32,.96); overflow:auto; padding:0 0 2rem; direction:rtl}
+#viewer .vbar{position:sticky; top:0; display:flex; flex-wrap:wrap; gap:.5rem; padding:.7rem; background:#0b1220; z-index:2}
+#viewer .vhint{color:#cbd5e1; font-size:.88rem; margin:.4rem 1rem .8rem}
+#viewer .vimgs img{display:block; width:min(100%,900px); margin:0 auto 1rem; border-radius:.4rem; -webkit-touch-callout:default; user-select:auto}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>دروستکەری پەڕەی تاقیکردنەوە</h1>
+  <p>دەق، فایل یان PDF بخە ناو — دەیکات بە لاپەڕەی ئامادە، بە قیاس و ستایلی دڵخوازی خۆت.</p>
+</header>
+
+<main class="app">
+  <!-- ========== پانێلی ڕێکخستن ========== -->
+  <aside class="panel" id="panel">
+    <h2>ناوەڕۆک</h2>
+    <label for="src">پرسیارەکان</label>
+    <textarea id="src" spellcheck="false" placeholder="١. پایتەختی هەرێمی کوردستان لە کوێیە؟&#10;A. سلێمانی&#10;B. هەولێر&#10;C. دهۆک&#10;D. کەرکووک"></textarea>
+    <div class="btns">
+      <button class="btn" id="btnFile" type="button">فایل بار بکە</button>
+      <button class="btn ghost" id="btnSample" type="button">نموونە</button>
+      <button class="btn ghost" id="btnClear" type="button">پاککردنەوە</button>
+      <input type="file" id="file" accept=".txt,.md,.csv,.pdf,image/*" hidden>
+    </div>
+    <details>
+      <summary>چۆن بنووسم؟</summary>
+      <ul>
+        <li>هەر پرسیارێک بە ژمارە دەست پێبکات: <code>1.</code> یان <code>١)</code></li>
+        <li>وەڵامەکان بە <code>A.</code> <code>B.</code> <code>C.</code> <code>D.</code> (یان أ ب ج د) — لە ڕیزی جیا یان هەمان ڕیز.</li>
+        <li>بۆ دیاریکردنی وەڵامی دروست: <code>*B.</code> یان لە ڕیزێکی جیادا <code>وەڵام: B</code></li>
+        <li>فایل: TXT، PDFی دەقدار، یان وێنە (OCR — پێویستی بە ئینتەرنێتە و دەبێت دەقەکە پێداچوونەوەی بۆ بکەیت).</li>
+        <li>ئەگەر دەقی PDF تێکچوو بوو، دەقەکە کۆپی بکە و لێرە پەیستی بکە.</li>
+      </ul>
+    </details>
+
+    <h2>قیاس و ستایل</h2>
+    <label for="ratio">قیاسی لاپەڕە</label>
+    <select id="ratio">
+      <option value="9:16">٩:١٦ — مۆبایل / ستۆری</option>
+      <option value="2:3" selected>٢:٣ — وەک نموونەکە</option>
+      <option value="3:4">٣:٤</option>
+      <option value="4:5">٤:٥</option>
+      <option value="1:1">١:١ — چوارگۆشە</option>
+      <option value="16:9">١٦:٩ — شاشە / پرێزەنتەیشن</option>
+      <option value="210:297">A4 — بۆ چاپ</option>
+      <option value="custom">قیاسی خۆم…</option>
+    </select>
+    <div class="row" id="customRatio">
+      <input type="number" id="cw" min="1" max="100" value="19" aria-label="پانی">
+      <span>:</span>
+      <input type="number" id="ch" min="1" max="100" value="6" aria-label="بەرزی">
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="theme">ستایل</label>
+        <select id="theme">
+          <option value="blue">شین (وەک نموونە)</option>
+          <option value="green">سەوز</option>
+          <option value="purple">مۆر</option>
+          <option value="warm">گەرم</option>
+          <option value="dark">تاریک</option>
+          <option value="paper">وەرەقەی تاقیکردنەوە</option>
+        </select>
+      </div>
+      <div>
+        <label for="cols">ستوونەکان</label>
+        <select id="cols">
+          <option value="auto">خودکار</option>
+          <option value="1">١</option>
+          <option value="2">٢</option>
+          <option value="3">٣</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="optlayout">شێوەی وەڵامەکان</label>
+        <select id="optlayout">
+          <option value="auto">خودکار</option>
+          <option value="row">لە یەک ڕیز</option>
+          <option value="grid2">٢×٢</option>
+          <option value="list">لیست</option>
+        </select>
+      </div>
+      <div>
+        <label for="side">شوێنی ژمارە و A</label>
+        <select id="side">
+          <option value="ltr">لای چەپ (وەک نموونە)</option>
+          <option value="rtl">لای ڕاست</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label for="letters">پیتی وەڵامەکان</label>
+        <select id="letters">
+          <option value="en">A B C D</option>
+          <option value="ku">ا ب ج د</option>
+        </select>
+      </div>
+      <div>
+        <label for="digits">ژمارەکان</label>
+        <select id="digits">
+          <option value="en">1 2 3</option>
+          <option value="ar">١ ٢ ٣</option>
+        </select>
+      </div>
+    </div>
+
+    <label for="fs">قەبارەی نووسین: <span id="fsVal">100%</span></label>
+    <input type="range" id="fs" min="70" max="150" value="100" step="5" style="width:100%">
+
+    <label class="check"><input type="checkbox" id="showHdr" checked> سەرپەڕە پیشان بدە</label>
+    <label class="check"><input type="checkbox" id="repeatHdr"> سەرپەڕە لە هەموو لاپەڕەکان دووبارە بکەوە</label>
+    <label class="check"><input type="checkbox" id="showAns"> وەڵامی دروست دیاری بکە</label>
+
+    <h2>نووسینەکان</h2>
+    <label for="title">ناونیشان</label>
+    <input type="text" id="title" value="تاقیکردنەوە">
+    <label for="sub">ژێرناونیشان</label>
+    <input type="text" id="sub" value="هەڵبژاردنی چوار وەڵام">
+    <label for="note">ڕێنمایی</label>
+    <input type="text" id="note" value="پرسیارەکان بخوێنەوە و وەڵامی دروست هەڵبژێرە.">
+    <label for="footer">نووسینی کۆتایی</label>
+    <input type="text" id="footer" value="سەرکەوتوو بیت">
+    <details>
+      <summary>زانیاری وەرەقە (تەنها ستایلی وەرەقە)</summary>
+      <div class="row">
+        <div><label for="subject">بابەت</label><input type="text" id="subject"></div>
+        <div><label for="time">کات</label><input type="text" id="time"></div>
+        <div><label for="marks">نمرە</label><input type="text" id="marks"></div>
+      </div>
+    </details>
+
+    <h2>دابەزاندن</h2>
+    <label for="quality">کوالیتی وێنە</label>
+    <select id="quality">
+      <option value="1">ئاسایی (١×)</option>
+      <option value="1.5">بەرز (١.٥×)</option>
+      <option value="2" selected>زۆر بەرز (٢×)</option>
+    </select>
+  </aside>
+
+  <!-- ========== پێشبینین ========== -->
+  <section class="stage">
+    <div class="toolbar">
+      <span id="count">—</span>
+      <div class="btns" style="margin:0">
+        <button class="btn" id="btnGallery" type="button" disabled>هەموو بۆ گەلەری</button>
+        <button class="btn ghost" id="btnPdf" type="button" disabled>PDF دابەزێنە</button>
+        <button class="btn ghost" id="btnZip" type="button" disabled>هەموو وەک ZIP (PNG)</button>
+      </div>
+    </div>
+    <div class="status" id="status" role="status" aria-live="polite"></div>
+    <div id="pages"></div>
+  </section>
+</main>
+
+<script>
+/* =====================================================================
+   دروستکەری پەڕەی تاقیکردنەوە — هەموو شتێک لە ناو وێبگەڕەکەدا کار دەکات
+   (هیچ سێرڤەرێک پێویست نییە، ڕاستەوخۆ لە GitHub Pages کار دەکات)
+   ===================================================================== */
+const $ = id => document.getElementById(id);
+
+const SAMPLE = `١. پایتەختی هەرێمی کوردستان لە کوێیە؟
+A. سلێمانی
+*B. هەولێر
+C. دهۆک
+D. کەرکووک
+
+٢. ژیان بەبێ کام شت مەحاڵە؟
+*A. ئاو
+B. ئاسن
+C. زێڕ
+D. نەوت
+
+٣. ١ + ٢ چەندە؟
+A. ٢
+*B. ٣
+C. ٤
+D. ٥
+
+٤. ڕەنگی ئاسمان لە ڕۆژدا چییە؟
+A. سوور
+*B. شین
+C. سەوز
+D. ڕەش
+
+٥. خۆر لە کام لاوە هەڵدێت؟ *A. ڕۆژهەڵات B. ڕۆژئاوا C. باکوور D. باشوور
+٦. هەفتەیەک چەند ڕۆژە؟ A. ٥ B. ٦ *C. ٧ D. ٨
+٧. گەورەترین ئاژەڵی وشکانی کامەیە؟ A. شێر *B. فیل C. ئەسپ D. بزن
+٨. ژمارەی مانگەکانی ساڵ چەندە؟ A. ١٠ B. ١١ *C. ١٢ D. ١٣`;
+
+/* ---------------------------------------------------------------
+   ١) شیکردنەوەی دەق بۆ پرسیار و وەڵام
+   --------------------------------------------------------------- */
+const QRE  = /^\s*[(\[]?([0-9\u0660-\u0669\u06F0-\u06F9]{1,3})\s*[.)\]\-–—:،ـ]+(?:\s+|(?![0-9\u0660-\u0669\u06F0-\u06F9]))(.+)$/;
+const MARK = /(^|[\s(\[،,;])([*✓✔√]?)\s*([A-Fa-f]|[أابجد])\s*[.)\]\-:]\s*/g;
+const ANSLINE = /^(?:answer|ans|وەڵام|وەلام|وه‌ڵام|الجواب|الاجابة)\s*[:：=\-]\s*\(?([A-Fa-fأابجد])\)?\s*$/i;
+
+function letterIdx(ch){
+  const i = 'ABCDEF'.indexOf(ch.toUpperCase());
+  if (i >= 0) return i;
+  const m = {'أ':0,'ا':0,'ب':1,'ج':2,'د':3};
+  return ch in m ? m[ch] : -1;
+}
+
+function parseBlock(b){
+  const parts = b.parts.slice();
+  let correct = null;
+  if (parts.length > 1){
+    const am = parts[parts.length-1].match(ANSLINE);
+    if (am){ correct = letterIdx(am[1]); parts.pop(); }
+  }
+  const full = parts.join(' ').replace(/\s+/g,' ').trim();
+  if (!full) return null;
+
+  // نیشانەی وەڵامەکان بدۆزەرەوە (دەبێت A، پاشان B، ... بە ڕیز بن)
+  const found = [];
+  let expect = 0;
+  for (const m of full.matchAll(MARK)){
+    const idx = letterIdx(m[3]);
+    if (idx === expect){ found.push({m, idx}); expect++; }
+  }
+
+  let q = full, opts = [];
+  if (found.length >= 2){
+    q = full.slice(0, found[0].m.index).trim();
+    found.forEach((f, i) => {
+      const start = f.m.index + f.m[0].length;
+      const end = i + 1 < found.length ? found[i+1].m.index : full.length;
+      let t = full.slice(start, end).trim();
+      let ok = !!f.m[2];
+      t = t.replace(/\s*[*✓✔√]\s*$/, () => { ok = true; return ''; });
+      opts.push({t, ok});
+    });
+  } else if (parts.length >= 3){
+    // بێ پیت: ڕیزی یەکەم پرسیارە، ئەوانی تر وەڵامن
+    q = parts[0];
+    opts = parts.slice(1).map(t => ({t: t.trim(), ok: /[*✓✔√]\s*$/.test(t)}))
+                         .map(o => ({t: o.t.replace(/\s*[*✓✔√]\s*$/, ''), ok: o.ok}));
+  }
+  if (correct !== null && opts[correct]) opts[correct].ok = true;
+  return {q, opts};
+}
+
+function parseQuestions(text){
+  const lines = text.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g,'').split(/\r?\n/);
+  let blocks = [], cur = null;
+  for (const raw of lines){
+    const l = raw.trim();
+    const m = l.match(QRE);
+    if (m){ cur = {parts:[m[2].trim()]}; blocks.push(cur); }
+    else if (cur && l){ cur.parts.push(l); }
+  }
+  if (!blocks.length){
+    // ژمارەی نییە: هەر بڵۆکێک (بە ڕیزی بەتاڵ جیا) پرسیارێکە
+    blocks = text.split(/\n\s*\n/)
+      .map(p => p.split(/\r?\n/).map(s => s.trim()).filter(Boolean))
+      .filter(a => a.length)
+      .map(a => ({parts:a}));
+  }
+  return blocks.map(parseBlock).filter(Boolean);
+}
+
+/* ---------------------------------------------------------------
+   ٢) دروستکردنی لاپەڕەکان
+   --------------------------------------------------------------- */
+const esc = s => String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const toAr = n => String(n).replace(/\d/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
+
+let token = 0;
+const state = {pages:[], figs:[], W:0, H:0, count:0};
+
+function getRatio(){
+  const v = $('ratio').value;
+  if (v === 'custom') return [Math.max(1,+$('cw').value||19), Math.max(1,+$('ch').value||6)];
+  return v.split(':').map(Number);
+}
+function pageSize(rw, rh){
+  const r = rw / rh;
+  return r >= 1 ? {W:1920, H:Math.round(1920/r)} : {W:1080, H:Math.round(1080/r)};
+}
+function readSettings(){
+  const [rw, rh] = getRatio();
+  const {W, H} = pageSize(rw, rh);
+  const fs = (+$('fs').value) / 100;
+  const base = Math.max(11, Math.round(Math.min(W, H) * 0.024 * fs));
+  const r = rw / rh;
+  const cols = $('cols').value === 'auto' ? (r >= 2.4 ? 3 : r >= 1.15 ? 2 : 1) : +$('cols').value;
+  return {
+    W, H, base, cols,
+    theme: $('theme').value, optlayout: $('optlayout').value, side: $('side').value,
+    letters: $('letters').value, digits: $('digits').value,
+    showAns: $('showAns').checked, showHdr: $('showHdr').checked, repeatHdr: $('repeatHdr').checked,
+    title: $('title').value.trim(), sub: $('sub').value.trim(), note: $('note').value.trim(), footer: $('footer').value.trim(),
+    subject: $('subject').value.trim(), time: $('time').value.trim(), marks: $('marks').value.trim()
+  };
+}
+
+function optCols(opts, st){
+  const n = opts.length;
+  if (!n) return 1;
+  if (st.optlayout === 'row')   return n <= 4 ? n : 3;
+  if (st.optlayout === 'grid2') return n === 1 ? 1 : 2;
+  if (st.optlayout === 'list')  return 1;
+  // خودکار: بەپێی پانی کارتەکە و درێژی نووسینەکان
+  const maxLen = Math.max(...opts.map(o => o.t.length));
+  const cardEm = ((st.W / st.base) - 2.6) / st.cols - 2.6;
+  const fit = k => (((cardEm - (k-1)*.45) / k) - 3.1) * 2.1;
+  if (n <= 4){
+    if (maxLen <= fit(n)) return n;
+    if (n >= 2 && maxLen <= fit(2)) return 2;
+    return 1;
+  }
+  if (maxLen <= fit(3)) return 3;
+  if (maxLen <= fit(2)) return 2;
+  return 1;
+}
+
+function cardHTML(q, i, st){
+  const n = st.digits === 'ar' ? toAr(i+1) : (i+1);
+  const L = st.letters === 'ku' ? ['ا','ب','ج','د','ه','و'] : ['A','B','C','D','E','F'];
+  const body = q.opts.length
+    ? `<div class="opts" style="--oc:${optCols(q.opts, st)}">` +
+      q.opts.map((o,k) => `<div class="opt c${k%6}${st.showAns && o.ok ? ' ok' : ''}"><span class="ob">${L[k%6]}</span><span class="ot">${esc(o.t)}</span></div>`).join('') +
+      `</div>`
+    : `<div class="blank"></div>`;
+  return `<div class="q"><div class="qh"><span class="qn">${n}</span><div class="qt">${esc(q.q)}</div></div>${body}</div>`;
+}
+
+function headerHTML(st){
+  if (!st.showHdr) return '';
+  const t = esc(st.title), s = esc(st.sub), n = esc(st.note);
+  if (st.theme === 'paper'){
+    const line = '______________';
+    return `<div class="hdr"><div class="h1">${t}</div>${s ? `<div class="h2">${s}</div>` : ''}
+      <div class="info">
+        <div>بابەت: ${esc(st.subject) || line}</div><div>کات: ${esc(st.time) || line}</div>
+        <div>ناوی قوتابی: ${line}</div><div>نمرە: ${esc(st.marks) || line}</div>
+        <div>بەروار: ___ / ___ / ____</div>
+      </div>${n ? `<div class="h3">${n}</div>` : ''}</div>`;
+  }
+  return `<div class="hdr"><div class="hic">📝</div>
+    <div class="htx"><div class="h1">${t}</div>${s ? `<div class="h2">${s}</div>` : ''}${n ? `<div class="h3">${n}</div>` : ''}</div>
+    <div class="hic">💡</div></div>`;
+}
+
+function makePage(st, idx){
+  const fig = document.createElement('figure');
+  fig.className = 'pfig';
+  const wrap = document.createElement('div');
+  wrap.className = 'pagewrap';
+  const page = document.createElement('div');
+  page.className = `page t-${st.theme} side-${st.side}`;
+  page.style.cssText = `width:${st.W}px;height:${st.H}px;font-size:${st.base}px;--cols:${st.cols}`;
+  const hdr = (idx === 0 || st.repeatHdr) ? headerHTML(st) : '';
+  const ftr = st.footer ? `<div class="ftr"><i class="fl"></i><span>${esc(st.footer)}</span><i class="fl"></i></div>` : '';
+  page.innerHTML = `${hdr}<div class="qs"></div>${ftr}`;
+  wrap.appendChild(page);
+  const cap = document.createElement('figcaption');
+  cap.className = 'cap';
+  cap.innerHTML = `<span class="lbl"></span><span class="capbtns"><button class="btn" type="button" data-i="${idx}" data-act="gal">بۆ گەلەری</button> <button class="btn ghost" type="button" data-i="${idx}" data-act="dl">فایل</button></span>`;
+  fig.appendChild(wrap); fig.appendChild(cap);
+  return {fig, wrap, page, qs: page.querySelector('.qs'), cap};
+}
+
+async function fontsReady(){
+  try{
+    await Promise.all([400,600,700,800].map(w => document.fonts.load(`${w} 20px "Noto Sans Arabic"`, 'کوردی ئاو ڕۆژ ABC 123')));
+    await document.fonts.ready;
+  }catch(e){}
+}
+
+async function render(){
+  const my = ++token;
+  await fontsReady();
+  if (my !== token) return;
+
+  const st = readSettings();
+  const qs = parseQuestions($('src').value);
+  const host = $('pages');
+  host.innerHTML = '';
+  state.pages = []; state.figs = []; state.W = st.W; state.H = st.H; state.count = qs.length;
+
+  if (!qs.length){
+    host.innerHTML = `<div class="empty">هیچ پرسیارێک نەدۆزرایەوە.<br>پێش هەر پرسیارێک ژمارە بنووسە (١. …) و وەڵامەکان بە A. B. C. D.</div>`;
+    $('count').textContent = '—';
+    $('btnPdf').disabled = $('btnZip').disabled = $('btnGallery').disabled = true;
+    return;
+  }
+
+  let cur = makePage(st, 0);
+  host.appendChild(cur.fig);
+  state.figs.push(cur);
+
+  qs.forEach((q, i) => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = cardHTML(q, i, st);
+    const card = tmp.firstElementChild;
+    cur.qs.appendChild(card);
+    if (cur.qs.scrollHeight > cur.qs.clientHeight + 1 && cur.qs.children.length > 1){
+      cur.qs.removeChild(card);
+      cur = makePage(st, state.figs.length);
+      host.appendChild(cur.fig);
+      state.figs.push(cur);
+      cur.qs.appendChild(card);
+    }
+  });
+
+  const total = state.figs.length;
+  state.figs.forEach((f, i) => {
+    state.pages.push(f.page);
+    f.cap.querySelector('.lbl').textContent = `لاپەڕە ${i+1} / ${total}`;
+    if (total > 1){
+      const pn = document.createElement('div');
+      pn.className = 'pn';
+      pn.textContent = st.digits === 'ar' ? `${toAr(i+1)} / ${toAr(total)}` : `${i+1} / ${total}`;
+      f.page.appendChild(pn);
+    }
+  });
+
+  applyScale();
+  $('count').textContent = `${qs.length} پرسیار · ${total} لاپەڕە · ${st.W}×${st.H}px`;
+  $('btnPdf').disabled = $('btnZip').disabled = $('btnGallery').disabled = false;
+}
+
+function applyScale(){
+  if (!state.W) return;
+  const avail = $('pages').clientWidth;
+  if (!avail) return;
+  const s = Math.min(1, avail / state.W);
+  state.figs.forEach(f => {
+    f.wrap.style.width  = (state.W * s) + 'px';
+    f.wrap.style.height = (state.H * s) + 'px';
+    f.page.style.transform = `scale(${s})`;
+    f.cap.style.width = (state.W * s) + 'px';
+  });
+}
+
+/* ---------------------------------------------------------------
+   ٣) فایل: TXT / PDF / وێنە
+   --------------------------------------------------------------- */
+function status(msg, err){
+  const el = $('status');
+  el.textContent = msg || '';
+  el.className = 'status' + (err ? ' err' : '');
+}
+
+async function readPDF(f){
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  const pdf = await pdfjsLib.getDocument({data: await f.arrayBuffer()}).promise;
+  let out = '';
+  for (let p = 1; p <= pdf.numPages; p++){
+    status(`خوێندنەوەی PDF: ${p} / ${pdf.numPages}…`);
+    const tc = await (await pdf.getPage(p)).getTextContent();
+    let line = '', lastY = null;
+    for (const it of tc.items){
+      if (!it.str) continue;
+      const y = it.transform[5];
+      if (lastY !== null && Math.abs(y - lastY) > 4){ out += line.trim() + '\n'; line = ''; }
+      line += it.str; lastY = y;
+    }
+    out += line.trim() + '\n';
+  }
+  if (!/[A-Za-z\u0600-\u06FF]/.test(out)) throw new Error('ئەم PDFـە دەقی تێدا نییە (ڕەنگە سکان بێت). وەک وێنە بارکە.');
+  return out;
+}
+
+function loadScript(src){
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.onload = res;
+    s.onerror = () => rej(new Error('نەتوانرا OCR بار بکرێت — ئینتەرنێتەکەت بپشکنە.'));
+    document.head.appendChild(s);
+  });
+}
+async function readImage(f){
+  if (!window.Tesseract) await loadScript('https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js');
+  const logger = m => { if (m.status === 'recognizing text') status(`OCR: ${Math.round(m.progress*100)}%`); };
+  status('OCR: خەریکی خوێندنەوەی وێنەکەم… (جاری یەکەم کەمێک دەخایەنێت)');
+  try{
+    return (await Tesseract.recognize(f, 'ckb+eng', {logger})).data.text;
+  }catch(e){
+    return (await Tesseract.recognize(f, 'ara+eng', {logger})).data.text;
+  }
+}
+
+async function loadFile(f){
+  try{
+    status('خەریکی خوێندنەوەی فایلەکەم…');
+    const name = f.name.toLowerCase();
+    let text, isOCR = false;
+    if (f.type === 'application/pdf' || name.endsWith('.pdf')) text = await readPDF(f);
+    else if (f.type.startsWith('image/')){ text = await readImage(f); isOCR = true; }
+    else text = await f.text();
+    $('src').value = text.trim();
+    status(isOCR ? 'OCR تەواو بوو — تکایە دەقەکە بپشکنە و هەڵەکان ڕاست بکەوە.' : 'فایلەکە بار کرا.');
+    render();
+  }catch(err){
+    status('هەڵە: ' + err.message, true);
+  }
+}
+
+/* ---------------------------------------------------------------
+   ٤) دابەزاندن: PNG / ZIP / PDF
+   --------------------------------------------------------------- */
+async function pageCanvas(i, scale){
+  await fontsReady();
+  const clone = state.pages[i].cloneNode(true);
+  clone.style.transform = 'none';
+  clone.style.left = '0'; clone.style.top = '0';
+  const holder = document.createElement('div');
+  holder.style.cssText = `position:absolute;left:-100000px;top:0;width:${state.W}px;height:${state.H}px;`;
+  holder.appendChild(clone);
+  document.body.appendChild(holder);
+  try{
+    return await html2canvas(clone, {scale, backgroundColor:null, logging:false, useCORS:true});
+  }finally{
+    holder.remove();
+  }
+}
+const toBlob = (c, type='image/png', q) => new Promise(r => c.toBlob(r, type, q));
+function saveBlob(blob, name){
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function setBusy(b){
+  $('btnPdf').disabled = $('btnZip').disabled = $('btnGallery').disabled = b || !state.pages.length;
+  document.querySelectorAll('.cap .btn').forEach(x => x.disabled = b);
+}
+const qScale = () => +$('quality').value || 2;
+
+async function exportOne(i){
+  try{
+    setBusy(true); status('خەریکی دروستکردنی وێنەکەم…');
+    const c = await pageCanvas(i, qScale());
+    saveBlob(await toBlob(c), `quiz-${i+1}.png`);
+    status('دابەزێنرا.');
+  }catch(e){ status('هەڵە: ' + e.message, true); }
+  finally{ setBusy(false); }
+}
+/* پاشەکەوتکردن لە گەلەری: لیستی هاوبەشکردنی مۆبایل («Save Image») بەکاردێنێت.
+   ئەگەر وێبگەڕەکە پشتگیری نەکات، بینەری وێنە دەکرێتەوە بۆ ڕاگرتنی پەنجە. */
+async function makeFiles(idx){
+  const files = [];
+  for (const i of idx){
+    status(`لاپەڕە ${i+1} / ${state.pages.length}…`);
+    const blob = await toBlob(await pageCanvas(i, qScale()));
+    files.push(new File([blob], `quiz-${i+1}.png`, {type:'image/png'}));
+  }
+  return files;
+}
+async function shareFiles(files){
+  if (navigator.canShare && navigator.canShare({files})){ await navigator.share({files}); return true; }
+  return false;
+}
+async function toGallery(idx){
+  try{
+    setBusy(true);
+    const files = await makeFiles(idx);
+    status('');
+    try{
+      if (await shareFiles(files)){ status('لە لیستەکە «Save Image / پاشەکەوتکردنی وێنە» هەڵبژێرە.'); return; }
+    }catch(e){
+      if (e.name === 'AbortError') return;
+    }
+    showViewer(files);
+  }catch(e){ status('هەڵە: ' + e.message, true); }
+  finally{ setBusy(false); }
+}
+function closeViewer(){
+  const v = $('viewer');
+  if (!v) return;
+  v.querySelectorAll('img').forEach(i => URL.revokeObjectURL(i.src));
+  v.remove();
+}
+function showViewer(files){
+  closeViewer();
+  const ov = document.createElement('div');
+  ov.id = 'viewer';
+  ov.innerHTML = `<div class="vbar">
+      <button class="btn" data-v="share" type="button">پاشەکەوتکردن لە گەلەری</button>
+      <button class="btn ghost" data-v="dl" type="button">لە فایل</button>
+      <button class="btn ghost" data-v="close" type="button">داخستن</button></div>
+    <p class="vhint">وێنەکە بە پەنجە ڕابگرە و «Save image / پاشەکەوتکردنی وێنە» هەڵبژێرە.</p><div class="vimgs"></div>`;
+  files.forEach(f => { const img = new Image(); img.src = URL.createObjectURL(f); img.alt = f.name; ov.querySelector('.vimgs').appendChild(img); });
+  ov.addEventListener('click', async e => {
+    const b = e.target.closest('[data-v]');
+    if (!b) return;
+    const a = b.dataset.v;
+    if (a === 'close') closeViewer();
+    if (a === 'dl') files.forEach((f, i) => setTimeout(() => saveBlob(f, f.name), i * 500));
+    if (a === 'share'){
+      try{ if (!(await shareFiles(files))) alert('ئەم وێبگەڕە هاوبەشکردنی فایل پشتگیری ناکات. وێنەکە بە پەنجە ڕابگرە.'); }
+      catch(err){}
+    }
+  });
+  document.body.appendChild(ov);
+}
+
+async function exportZip(){
+  try{
+    setBusy(true);
+    const zip = new JSZip();
+    for (let i = 0; i < state.pages.length; i++){
+      status(`لاپەڕە ${i+1} / ${state.pages.length}…`);
+      zip.file(`quiz-${i+1}.png`, await toBlob(await pageCanvas(i, qScale())));
+    }
+    status('خەریکی پێکەوەنانی ZIP…');
+    saveBlob(await zip.generateAsync({type:'blob'}), 'quiz-pages.zip');
+    status('دابەزێنرا.');
+  }catch(e){ status('هەڵە: ' + e.message, true); }
+  finally{ setBusy(false); }
+}
+async function exportPDF(){
+  try{
+    setBusy(true);
+    const {jsPDF} = window.jspdf;
+    const W = state.W, H = state.H, o = W > H ? 'l' : 'p';
+    const pdf = new jsPDF({orientation:o, unit:'px', format:[W,H], hotfixes:['px_scaling']});
+    for (let i = 0; i < state.pages.length; i++){
+      status(`لاپەڕە ${i+1} / ${state.pages.length}…`);
+      const c = await pageCanvas(i, qScale());
+      if (i > 0) pdf.addPage([W,H], o);
+      pdf.addImage(c.toDataURL('image/jpeg', 0.93), 'JPEG', 0, 0, W, H);
+    }
+    pdf.save('quiz.pdf');
+    status('دابەزێنرا.');
+  }catch(e){ status('هەڵە: ' + e.message, true); }
+  finally{ setBusy(false); }
+}
+
+/* ---------------------------------------------------------------
+   ٥) بەستنەوەی دوگمەکان
+   --------------------------------------------------------------- */
+let timer;
+const schedule = () => { clearTimeout(timer); timer = setTimeout(render, 250); };
+
+$('panel').addEventListener('input', schedule);
+$('panel').addEventListener('change', schedule);
+$('ratio').addEventListener('change', () => { $('customRatio').style.display = $('ratio').value === 'custom' ? 'flex' : 'none'; });
+$('fs').addEventListener('input', () => { $('fsVal').textContent = $('fs').value + '%'; });
+
+$('btnFile').addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', e => { const f = e.target.files[0]; if (f) loadFile(f); e.target.value = ''; });
+$('btnSample').addEventListener('click', () => { $('src').value = SAMPLE; status(''); render(); });
+$('btnClear').addEventListener('click', () => { $('src').value = ''; status(''); render(); });
+$('btnPdf').addEventListener('click', exportPDF);
+$('btnGallery').addEventListener('click', () => toGallery(state.pages.map((_, i) => i)));
+$('btnZip').addEventListener('click', exportZip);
+$('pages').addEventListener('click', e => {
+  const b = e.target.closest('button[data-i]');
+  if (!b) return;
+  if (b.dataset.act === 'gal') toGallery([+b.dataset.i]);
+  else exportOne(+b.dataset.i);
+});
+
+// فایل ڕابکێشە سەر ناوچەی نووسین
+$('src').addEventListener('dragover', e => e.preventDefault());
+$('src').addEventListener('drop', e => {
+  const f = e.dataTransfer && e.dataTransfer.files[0];
+  if (f){ e.preventDefault(); loadFile(f); }
+});
+
+new ResizeObserver(applyScale).observe($('pages'));
+
+$('src').value = SAMPLE;
+render();
+</script>
+</body>
+</html>
